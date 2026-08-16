@@ -6,7 +6,7 @@ from tkinter import filedialog, messagebox
 import pandas as pd
 
 
-# * FUNCTIONS
+# * <<<<<<<<<< FUNCTIONS >>>>>>>>>>
 def choose_file():
     file_path = filedialog.askopenfilename(
         title="Select an Excel or CSV file",
@@ -30,27 +30,35 @@ def choose_save_location():
 
 def generate_trend_card(df_row):
     """Formats the latest period's trend metrics into clean text."""
+
     # 1. Median Price Trend
-    price_chg = df_row["Median_Price_MoM_%"]
+    price_chg = (
+        0 if pd.isna(df_row["Median_Price_MoM_%"]) else df_row["Median_Price_MoM_%"]
+    )
     price_arrow = "↑" if price_chg > 0 else ("↓" if price_chg < 0 else "→")
     price_line = (
         f"Median price {price_arrow} {abs(price_chg):.1f}% compared to previous month"
     )
 
     # 2. Sales Volume Trend
-    vol_chg = df_row["Sales_Volume_MoM_%"]
+    vol_chg = (
+        0 if pd.isna(df_row["Sales_Volume_MoM_%"]) else df_row["Sales_Volume_MoM_%"]
+    )
     vol_arrow = "↑" if vol_chg > 0 else ("↓" if vol_chg < 0 else "→")
     vol_line = (
         f"Sales volume {vol_arrow} {abs(vol_chg):.1f}% compared to previous month"
     )
 
     # 3. DOM Difference
-    dom_diff = df_row["DOM_MoM_Diff"]
+    dom_diff = 0 if pd.isna(df_row["DOM_MoM_Diff"]) else df_row["DOM_MoM_Diff"]
     dom_arrow = "↑" if dom_diff > 0 else ("↓" if dom_diff < 0 else "→")
     dom_line = f"DOM {dom_arrow} {abs(dom_diff):.0f} days compared to previous month"
 
     return (
-        f"Market Trend ({df_row['CloseMonth']})\n{price_line}\n{vol_line}\n{dom_line}"
+        f"Market Trend For {df_row['CloseMonth']}\n"
+        f"{price_line}\n"
+        f"{vol_line}\n"
+        f"{dom_line}"
     )
 
 
@@ -66,7 +74,7 @@ def process_file():
     input_path = Path(input_path)
     output_path = save_location.get()
 
-    # * MAIN LOGIC
+    # * <<<<<<<<<< APP LOGIC SECTION >>>>>>>>>>
     try:
         # 1. Load data
         if input_path.suffix == ".xlsx":
@@ -92,11 +100,10 @@ def process_file():
         for col in date_cols:
             df[col] = pd.to_datetime(df[col], format="mixed", errors="coerce")
 
-        # * COLUMNS
+        # * PRICE & MARKET RESULTS
         close_price_col = df["ClosePrice"]
         days_on_market = df["DaysOnMarket"]
 
-        # * PRICE & MARKET RESULTS
         closing_price_sum = int(close_price_col.sum())
         avg_sale_price = int(close_price_col.mean())
         median_sale_price = int(close_price_col.median())
@@ -231,9 +238,6 @@ def process_file():
         else:
             sales_compared_to_list_price = "No valid closed sales available to analyze."
 
-            # print("---")
-            # print("No valid closed sales available to analyze.")
-
         # * PRICE DISTRIBUTION
         # Define standard price brackets
         bins = [0, 300000, 500000, 750000, 1000000, float("inf")]
@@ -254,9 +258,21 @@ def process_file():
         distribution_table["Percentage"] = (
             distribution_table["Property Count"] / len(df)
         ) * 100
+        # distribution_table = distribution_table.to_string(index=False)
 
-        # print("---")
-        # print(distribution_table.to_string(index=False))
+        # Format the table rows with explicit fixed-width spacing
+        dist_lines = [
+            f"{'Price Bracket':<16} {'Property Count':<16} {'Percentage':<10}"
+        ]
+        dist_lines.append("-" * 44)
+
+        for _, row in distribution_table.iterrows():
+            bracket = str(row["Price Bracket"])
+            count = f"{int(row['Property Count'])} listings"
+            pct = f"{row['Percentage']:.1f}%"
+            dist_lines.append(f"{bracket:<16} {count:<16} {pct:<10}")
+
+        price_distribution_string = "\n".join(dist_lines)
 
         # * MONTHLY TRENDS
         # 1. Create Month and Quarter Period columns
@@ -284,15 +300,30 @@ def process_file():
 
         # 4. Calculate percentage change for Price and Volume
         monthly_trends["Median_Price_MoM_%"] = (
-            monthly_trends["Median_Close_Price"].pct_change() * 100
-        ).round(2)
+            monthly_trends["Median_Close_Price"]
+            .pct_change()
+            .fillna(0)
+            .mul(100)
+            .round(2)
+        )
 
         monthly_trends["Sales_Volume_MoM_%"] = (
-            monthly_trends["Closed_Sales"].pct_change() * 100
-        ).round(2)
+            monthly_trends["Closed_Sales"].pct_change().fillna(0).mul(100).round(2)
+        )
 
         # 5. Calculate absolute change for DOM
-        monthly_trends["DOM_MoM_Diff"] = monthly_trends["Avg_DOM"].diff().round(2)
+        monthly_trends["DOM_MoM_Diff"] = (
+            monthly_trends["Avg_DOM"].diff().fillna(0).round(2)
+        )
+
+        # Replace NaN trend values with 0
+        trend_cols = [
+            "Median_Price_MoM_%",
+            "Sales_Volume_MoM_%",
+            "DOM_MoM_Diff",
+        ]
+
+        monthly_trends[trend_cols] = monthly_trends[trend_cols].fillna(0)
 
         # * Format specific columns directly
         formatted_trends = monthly_trends.copy()
@@ -313,21 +344,16 @@ def process_file():
         )
 
         formatted_monthly_trends_string = formatted_trends.to_string(index=False)
-        # print("---")
-        # print(formatted_trends.to_string(index=False))
 
         # Run for the latest available month
         # Replace NaN with 'N/A' or '-' for reporting
         market_trend_summary = generate_trend_card(monthly_trends.iloc[-1])
-        # print("---")
-        # print(market_trend_summary)
 
-        # * FORMATTED FINAL REPORT
+        # * <<<<<<<<<< REPORT SECTION >>>>>>>>>>
         raw_report = f"""
-        ==================================================
-                        MLS MARKET REPORT
-        ==================================================
-        *** OVERVIEW ***
+        ========
+        OVERVIEW
+        ========
 
         Avg Sale Price: ${avg_sale_price:,}
         Median Sale Price: ${median_sale_price:,}
@@ -340,7 +366,15 @@ def process_file():
         Absorption Rate: {absorption_rate:.2f} sales/month
         Months of Supply: {months_of_supply:.2f} months
 
-        *** Sale Price Compared To List Price Data ***
+        =======================
+        Sale Price Distribution
+        =======================
+        
+        {price_distribution_string}
+        
+        ======================================
+        Sale Price Compared To List Price Data
+        ======================================
 
         Average Sale-To-List-Price Ratio: {avg_sale_to_list:.2f}%
         Median Sale-To-List-Price Ratio:  {median_sale_to_list:.2f}%
@@ -350,18 +384,24 @@ def process_file():
 
         {sales_compared_to_list_price}
 
-        *** Monthly Trends ***
+        ==============
+        Monthly Trends
+        ==============
 
         {formatted_monthly_trends_string}
 
-        *** Market Trend Summary ***
+        ====================
+        Market Trend Summary
+        ====================
 
         {market_trend_summary}
         """
 
-        # 2. Strip leading whitespace from every line and join
+        # # 2. Strip leading whitespace from every line and join
         final_report_string = "\n".join(
-            line.lstrip() for line in raw_report.strip().splitlines()
+            line.lstrip()
+            for line in raw_report.strip().splitlines()
+            if line.index not in [0, 1, 2]
         )
 
         # * CREATE REPORT
@@ -382,7 +422,7 @@ def process_file():
         messagebox.showerror("Error", f"Something went wrong:\n\n{error}")
 
 
-# * GUI SECTION
+# * <<<<<<<<<< GUI SECTION >>>>>>>>>>
 window = tk.Tk()
 window.title("MLS Report App")
 w, h = 600, 300
